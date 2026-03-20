@@ -1,74 +1,100 @@
 from telegram import *
 from telegram.ext import *
 
-from analyzer import search, format_res
-from ai_analyzer import ai
-from database import save_log, get_logs
+from config import TOKEN, ADMIN_ID
+from analyzer import analyze
+from ai_analyzer import ai_analyze
+from database import *
 
-TOKEN = "PUT_TOKEN"
-
+# ===== MENU =====
 def menu():
     return InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔍 Search Code", callback_data="search")],
-        [InlineKeyboardButton("📄 Analyze Log", callback_data="analyze")],
-        [InlineKeyboardButton("🤖 AI Analyze", callback_data="ai")],
-        [InlineKeyboardButton("📜 My Logs", callback_data="logs")],
+        [InlineKeyboardButton("🔍 Analyze", callback_data="analyze")],
+        [InlineKeyboardButton("🤖 AI", callback_data="ai")],
+        [InlineKeyboardButton("📜 Logs", callback_data="logs")],
+        [InlineKeyboardButton("💎 Upgrade", callback_data="vip")]
     ])
 
-async def start(update: Update, context):
-    await update.message.reply_text("👋 YCZ Panic Analyzer PRO", reply_markup=menu())
+def admin_menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("➕ Add VIP", callback_data="addvip")]
+    ])
 
+# ===== START =====
+async def start(update: Update, context):
+    user = update.effective_user
+    add_user(user.id, user.username)
+
+    await update.message.reply_text(
+        "👋 YCZ Panic Analyzer PRO",
+        reply_markup=menu()
+    )
+
+# ===== BUTTONS =====
 async def buttons(update: Update, context):
     q = update.callback_query
     await q.answer()
 
-    if q.data == "search":
-        context.user_data["mode"] = "search"
-        await q.message.reply_text("Send code")
+    uid = q.from_user.id
 
-    elif q.data == "analyze":
+    if q.data == "analyze":
         context.user_data["mode"] = "analyze"
-        await q.message.reply_text("Send log")
+        await q.message.reply_text("Send panic log")
 
     elif q.data == "ai":
         context.user_data["mode"] = "ai"
         await q.message.reply_text("Send log for AI")
 
     elif q.data == "logs":
-        logs = get_logs(q.from_user.id)
-
+        logs = get_logs(uid)
         if not logs:
             await q.message.reply_text("No logs")
             return
 
         msg = ""
-        for log, res, date in logs[-5:]:
-            msg += f"{date}\n{log[:30]}...\n\n"
+        for l, r, d in logs:
+            msg += f"{d}\n{l[:30]}...\n\n"
 
-        await q.message.reply_text(msg[:4000])
+        await q.message.reply_text(msg)
 
+    elif q.data == "vip":
+        await q.message.reply_text("💎 Contact admin to upgrade")
+
+    elif q.data == "addvip" and uid == ADMIN_ID:
+        context.user_data["mode"] = "addvip"
+        await q.message.reply_text("Send user_id days")
+
+# ===== TEXT =====
 async def text(update: Update, context):
-    mode = context.user_data.get("mode", "search")
+    uid = update.effective_user.id
     t = update.message.text
+    mode = context.user_data.get("mode")
 
-    user_id = update.message.from_user.id
-    username = update.message.from_user.username or "unknown"
+    # ADMIN
+    if mode == "addvip" and uid == ADMIN_ID:
+        try:
+            user_id, days = t.split()
+            set_vip(int(user_id), int(days))
+            await update.message.reply_text("✅ VIP added")
+        except:
+            await update.message.reply_text("Format: user_id days")
+        return
 
-    if mode in ["search", "analyze"]:
-        r = search(t)
-        msg = format_res(r)
-
-        if msg:
-            await update.message.reply_text(msg[:4000])
-            save_log(user_id, username, t, msg, "basic")
+    # NORMAL
+    if mode == "analyze":
+        res = analyze(t)
+        if res:
+            await update.message.reply_text(res)
+            save_log(uid, t, res, "basic")
         else:
             await update.message.reply_text("Not found")
 
     elif mode == "ai":
-        result = ai(t)
-        await update.message.reply_text(result[:4000])
-        save_log(user_id, username, t, result, "ai")
+        res = ai_analyze(t)
+        await update.message.reply_text(res[:4000])
+        save_log(uid, t, res, "ai")
 
+# ===== RUN =====
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))

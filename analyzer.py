@@ -1,31 +1,22 @@
 from panic_db import PANIC_DB
 
-def search(text):
+def analyze(text):
     text = text.upper()
-    res = []
+    found = []
 
     for code, data in PANIC_DB.items():
         if code in text:
-            res.append((code, data))
+            found.append((code, data))
 
-    return res
-
-def format_res(res):
-    if not res:
+    if not found:
         return None
 
-    msg = "🔍 Diagnosis:\n\n"
+    msg = "🔍 Result:\n\n"
 
-    for code, d in res:
-        msg += f"📌 {code}\n"
-        msg += f"📂 {d['cat']}\n"
-        msg += f"🔧 {d['issue']}\n"
-        msg += f"⚠️ {d['p']}\n"
-        msg += "🛠 Fix:\n"
-
+    for code, d in found:
+        msg += f"📌 {code}\n{d['issue']}\n"
         for f in d["fix"]:
-            msg += f" - {f}\n"
-
+            msg += f"- {f}\n"
         msg += "\n"
 
     return msg
