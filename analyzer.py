@@ -1,31 +1,31 @@
 from panic_db import PANIC_DB
 
-def detect_type(text):
-    t = text.lower()
-    if "aop panic" in t:
-        return "AOP PANIC"
-    elif "watchdog" in t:
-        return "WATCHDOG"
-    elif "baseband" in t:
-        return "BASEBAND"
-    return "UNKNOWN"
+def search(text):
+    text = text.upper()
+    res = []
 
-def analyze_basic(text):
-    text_up = text.upper()
-    found = []
+    for code, data in PANIC_DB.items():
+        if code in text:
+            res.append((code, data))
 
-    for key in PANIC_DB:
-        if key in text_up:
-            found.append((key, PANIC_DB[key]))
+    return res
 
-    if not found:
+def format_res(res):
+    if not res:
         return None
 
-    result = f"🔍 Panic Type: {detect_type(text)}\n\n"
+    msg = "🔍 Diagnosis:\n\n"
 
-    for code, data in found:
-        result += f"📌 {code}\n"
-        result += f"🔧 {data['issue']}\n"
-        result += f"🛠 {data['fix']}\n\n"
+    for code, d in res:
+        msg += f"📌 {code}\n"
+        msg += f"📂 {d['cat']}\n"
+        msg += f"🔧 {d['issue']}\n"
+        msg += f"⚠️ {d['p']}\n"
+        msg += "🛠 Fix:\n"
 
-    return result
+        for f in d["fix"]:
+            msg += f" - {f}\n"
+
+        msg += "\n"
+
+    return msg

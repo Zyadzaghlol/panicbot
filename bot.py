@@ -1,45 +1,78 @@
-from telegram import Update
+from telegram import *
 from telegram.ext import *
-from analyzer import analyze_basic
-from ai_analyzer import ai_analyze
 
-import os
+from analyzer import search, format_res
+from ai_analyzer import ai
+from database import save_log, get_logs
 
-TOKEN = os.getenv("TOKEN")
+TOKEN = "PUT_TOKEN"
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "👋 iPhone Panic Analyzer Bot\n\nSend panic log or file."
-    )
+def menu():
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔍 Search Code", callback_data="search")],
+        [InlineKeyboardButton("📄 Analyze Log", callback_data="analyze")],
+        [InlineKeyboardButton("🤖 AI Analyze", callback_data="ai")],
+        [InlineKeyboardButton("📜 My Logs", callback_data="logs")],
+    ])
 
-async def handle_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    text = update.message.text
+async def start(update: Update, context):
+    await update.message.reply_text("👋 YCZ Panic Analyzer PRO", reply_markup=menu())
 
-    basic = analyze_basic(text)
+async def buttons(update: Update, context):
+    q = update.callback_query
+    await q.answer()
 
-    if basic:
-        await update.message.reply_text(basic[:4000])
-    else:
-        ai = ai_analyze(text)
-        await update.message.reply_text("🤖 AI Analysis:\n\n" + ai[:4000])
+    if q.data == "search":
+        context.user_data["mode"] = "search"
+        await q.message.reply_text("Send code")
 
-async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    file = await update.message.document.get_file()
-    content = await file.download_as_bytearray()
-    text = content.decode("utf-8", errors="ignore")
+    elif q.data == "analyze":
+        context.user_data["mode"] = "analyze"
+        await q.message.reply_text("Send log")
 
-    basic = analyze_basic(text)
+    elif q.data == "ai":
+        context.user_data["mode"] = "ai"
+        await q.message.reply_text("Send log for AI")
 
-    if basic:
-        await update.message.reply_text(basic[:4000])
-    else:
-        ai = ai_analyze(text)
-        await update.message.reply_text("🤖 AI Analysis:\n\n" + ai[:4000])
+    elif q.data == "logs":
+        logs = get_logs(q.from_user.id)
+
+        if not logs:
+            await q.message.reply_text("No logs")
+            return
+
+        msg = ""
+        for log, res, date in logs[-5:]:
+            msg += f"{date}\n{log[:30]}...\n\n"
+
+        await q.message.reply_text(msg[:4000])
+
+async def text(update: Update, context):
+    mode = context.user_data.get("mode", "search")
+    t = update.message.text
+
+    user_id = update.message.from_user.id
+    username = update.message.from_user.username or "unknown"
+
+    if mode in ["search", "analyze"]:
+        r = search(t)
+        msg = format_res(r)
+
+        if msg:
+            await update.message.reply_text(msg[:4000])
+            save_log(user_id, username, t, msg, "basic")
+        else:
+            await update.message.reply_text("Not found")
+
+    elif mode == "ai":
+        result = ai(t)
+        await update.message.reply_text(result[:4000])
+        save_log(user_id, username, t, result, "ai")
 
 app = ApplicationBuilder().token(TOKEN).build()
 
 app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT, handle_text))
-app.add_handler(MessageHandler(filters.Document.ALL, handle_file))
+app.add_handler(CallbackQueryHandler(buttons))
+app.add_handler(MessageHandler(filters.TEXT, text))
 
 app.run_polling()

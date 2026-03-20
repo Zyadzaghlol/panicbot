@@ -1,28 +1,25 @@
+from openai import OpenAI
 import os
 
-def ai_analyze(text):
-    try:
-        from openai import OpenAI
-        client = OpenAI()
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-        prompt = f"""
-Analyze this iPhone panic log.
+def ai(text):
+    prompt = f"""
+You are a professional iPhone repair technician.
 
-Give:
+Analyze this panic log and give:
 - Problem
 - Component
-- Fix
+- Root Cause
+- Fix Steps
 - Probability
 
 {text}
 """
 
-        res = client.chat.completions.create(
-            model="gpt-4.1-mini",
-            messages=[{"role": "user", "content": prompt}]
-        )
+    res = client.chat.completions.create(
+        model="gpt-4.1-mini",
+        messages=[{"role":"user","content":prompt}]
+    )
 
-        return res.choices[0].message.content
-
-    except:
-        return "⚠️ AI failed or no API key"
+    return res.choices[0].message.content
